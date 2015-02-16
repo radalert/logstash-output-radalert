@@ -66,7 +66,7 @@ class LogStash::Outputs::RadAlert < LogStash::Outputs::Base
 
   def check_name event
     if event['check'] then
-      event['check']
+      event.sprintf(event['check'])
     else 
       if @check then
         event.sprintf(@check)
