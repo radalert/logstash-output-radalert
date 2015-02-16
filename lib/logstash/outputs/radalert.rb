@@ -11,14 +11,17 @@ class LogStash::Outputs::RadAlert < LogStash::Outputs::Base
   config :api_key, :validate => :string, :required => true
 
   # Heartbeating endpoint
-  config :pdurl, :validate => :string, :default => "http://requestb.in/1lnaxql1"
+  config :pdurl, :validate => :string, :default => "http://requestb.in/1bormpk1"
 
   # If it is a critical or ok event
   config :state, :validate => :string, :default => "CRITICAL"
 
-  config :check, :validate => :string, :default => "Logstash %{host}"
+  # the check name will be calculated by default
+  config :check, :validate => :string
   
+  # the summary can just be the parsed log message
   config :summary, :validate => :string, :default => "%{message}"
+
 
 
   public
@@ -33,13 +36,25 @@ class LogStash::Outputs::RadAlert < LogStash::Outputs::Base
   public
   def receive(event)
     return unless output?(event)
-    puts "nizzle"
+    puts event.to_json
+
     rad_message = Hash.new
     rad_message[:api_key] = @api_key
-    rad_message[:check] = event.sprintf(@check)
+    rad_message[:check] = check_name(event)
     rad_message[:state] = event.sprintf(@state)
     rad_message[:summary] = event.sprintf(@summary)
-    rad_message[:tags] =  @tags if @tags
+
+    rad_message[:tags] = ['logstash']
+    if event['tags'] then      
+      rad_message[:tags] += event['tags']
+    else 
+      #better than just having logstash as tag
+      rad_message[:tags] += [rad_message[:check]] 
+    end
+
+    #TODO: set state smartly
+    #TODO: set TTL and expiry smartly
+
     request = Net::HTTP::Post.new(@pd_uri.path)
     request.body = rad_message.to_json
     response = @client.request(request)
@@ -48,6 +63,22 @@ class LogStash::Outputs::RadAlert < LogStash::Outputs::Base
 
   end
 
+
+  def check_name event
+    if event['check'] then
+      event['check']
+    else 
+      if @check then
+        event.sprintf(@check)
+      else 
+        if event['path'] then      
+          "#{event['host']}:#{event['path']}"
+        else 
+          event['host']
+        end
+      end
+    end
+  end
 
 
 
