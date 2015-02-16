@@ -16,6 +16,12 @@ class LogStash::Outputs::RadAlert < LogStash::Outputs::Base
   # If it is a critical or ok event
   config :state, :validate => :string, :default => "CRITICAL"
 
+  # If set to true - will be an OK heartbeat
+  config :heartbeat, :validate => :boolean, :default => false
+
+  # how long to expire the heartbeat after, if using one
+  config :heartbeat_expiry, :validate => :number, :default => 600
+
   # the check name will be calculated by default
   config :check, :validate => :string
   
@@ -41,7 +47,8 @@ class LogStash::Outputs::RadAlert < LogStash::Outputs::Base
     rad_message = Hash.new
     rad_message[:api_key] = @api_key
     rad_message[:check] = check_name(event)
-    rad_message[:state] = event.sprintf(@state)
+    rad_message[:state] = @heartbeat ? "OK" : "CRITICAL" 
+    rad_message[:ttl] = @heartbeat_expiry
     rad_message[:summary] = event.sprintf(@summary)
 
     rad_message[:tags] = ['logstash']
@@ -58,10 +65,12 @@ class LogStash::Outputs::RadAlert < LogStash::Outputs::Base
     request = Net::HTTP::Post.new(@pd_uri.path)
     request.body = rad_message.to_json
     response = @client.request(request)
+
     @logger.debug("RadAlert Response", :response => response.body)
 
 
   end
+
 
 
   def check_name event
