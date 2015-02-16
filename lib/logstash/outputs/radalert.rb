@@ -20,7 +20,7 @@ class LogStash::Outputs::RadAlert < LogStash::Outputs::Base
   config :heartbeat, :validate => :boolean, :default => false
 
   # how long to expire the heartbeat after, if using one
-  config :heartbeat_expiry, :validate => :number, :default => 600
+  config :heartbeat_expiry, :validate => :number
 
   # the check name will be calculated by default
   config :check, :validate => :string
@@ -48,8 +48,17 @@ class LogStash::Outputs::RadAlert < LogStash::Outputs::Base
     rad_message[:api_key] = @api_key
     rad_message[:check] = check_name(event)
     rad_message[:state] = @heartbeat ? "OK" : "CRITICAL" 
-    rad_message[:ttl] = @heartbeat_expiry
     rad_message[:summary] = event.sprintf(@summary)
+
+    if @heartbeat_expiry then
+      puts "yeah222"
+      if @heartbeat then
+        rad_message[:ttl] = @heartbeat_expiry
+      else 
+        rad_message[:critical_ttl] = @heartbeat_expiry
+      end
+    end
+    
 
     rad_message[:tags] = ['logstash']
     if event['tags'] then      
@@ -58,9 +67,6 @@ class LogStash::Outputs::RadAlert < LogStash::Outputs::Base
       #better than just having logstash as tag
       rad_message[:tags] += [rad_message[:check]] 
     end
-
-    #TODO: set state smartly
-    #TODO: set TTL and expiry smartly
 
     request = Net::HTTP::Post.new(@pd_uri.path)
     request.body = rad_message.to_json
