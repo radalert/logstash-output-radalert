@@ -11,13 +11,13 @@ class LogStash::Outputs::RadAlert < LogStash::Outputs::Base
   config :api_key, :validate => :string, :required => true
 
   # Heartbeating endpoint
-  config :pdurl, :validate => :string, :default => "http://requestb.in/1bormpk1"
+  config :rad_heartbeat_url, :validate => :string, :default => "http://requestb.in/1bormpk1"
 
   # If set to true - will be an OK heartbeat
-  config :event_state, :validate => :string, :default => "CRITICAL"
+  config :event_state, :validate => :string, :default => "OK"
 
-  # how long to expire the heartbeat after, if using one
-  config :event_timeout, :validate => :number
+  # how long to expire the heartbeat after, if using one - set to -1 to not set it at all
+  config :event_timeout, :validate => :number, :default => 1000
 
   # what to go to next
   config :event_transition_to, :validate => :string, :default => "UNKNOWN"
@@ -37,8 +37,8 @@ class LogStash::Outputs::RadAlert < LogStash::Outputs::Base
   def register
     require 'net/http'
     require 'uri'
-    @pd_uri = URI.parse(@pdurl)
-    @client = Net::HTTP.new(@pd_uri.host, @pd_uri.port)
+    @rad_uri = URI.parse(@rad_heartbeat_url)
+    @client = Net::HTTP.new(@rad_uri.host, @rad_uri.port)
     puts "registering"
   end
 
@@ -50,13 +50,14 @@ class LogStash::Outputs::RadAlert < LogStash::Outputs::Base
     rad_message = Hash.new
     rad_message[:api_key] = @api_key
     rad_message[:check] = check_name(event)
-    rad_message[:state] = @event_state
-    rad_message[:transition_to] = @event_transition_to
-    rad_message[:summary] = event.sprintf(@summary)
+    rad_message[:state] = event.sprintf(event['event_state'] ||= @event_state)
+    rad_message[:transition_to] = event.sprintf(event['event_transition_to'] ||= @event_transition_to)
+    rad_message[:summary] = event.sprintf(event['summary'] ||= @summary)
 
-    if @event_timeout then
-        rad_message[:ttl] = @event_timeout
+    if event['event_timeout'] or @event_timeout then
+      rad_message[:ttl] = (event['event_timeout'] ||= @event_timeout)
     end
+
     
     rad_message[:tags] = ['logstash']
     if event['tags'] then      
@@ -71,18 +72,14 @@ class LogStash::Outputs::RadAlert < LogStash::Outputs::Base
       rad_message[:tags] += @event_tags 
     end
 
-    request = Net::HTTP::Post.new(@pd_uri.path)
+    request = Net::HTTP::Post.new(@rad_uri.path)
     request.body = rad_message.to_json
     response = @client.request(request)
 
     puts request.body
 
     @logger.debug("RadAlert Response", :response => response.body)
-
-
   end
-
-
 
   def check_name event
     if event['check'] then
