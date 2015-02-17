@@ -13,20 +13,20 @@ class LogStash::Outputs::RadAlert < LogStash::Outputs::Base
   # Heartbeating endpoint
   config :pdurl, :validate => :string, :default => "http://requestb.in/1bormpk1"
 
-  # If it is a critical or ok event
-  config :state, :validate => :string, :default => "CRITICAL"
-
   # If set to true - will be an OK heartbeat
   config :heartbeat, :validate => :boolean, :default => false
 
   # how long to expire the heartbeat after, if using one
-  config :heartbeat_expiry, :validate => :number
+  config :event_timeout, :validate => :number
 
   # the check name will be calculated by default
   config :check, :validate => :string
   
   # the summary can just be the parsed log message
   config :summary, :validate => :string, :default => "%{message}"
+
+  # optional event tags - usually use normal tags
+  config :event_tags, :validate => :array
 
 
 
@@ -50,16 +50,10 @@ class LogStash::Outputs::RadAlert < LogStash::Outputs::Base
     rad_message[:state] = @heartbeat ? "OK" : "CRITICAL" 
     rad_message[:summary] = event.sprintf(@summary)
 
-    if @heartbeat_expiry then
-      puts "yeah222"
-      if @heartbeat then
-        rad_message[:ttl] = @heartbeat_expiry
-      else 
-        rad_message[:critical_ttl] = @heartbeat_expiry
-      end
+    if @event_timeout then
+        rad_message[:ttl] = @event_timeout
     end
     
-
     rad_message[:tags] = ['logstash']
     if event['tags'] then      
       rad_message[:tags] += event['tags']
@@ -68,9 +62,16 @@ class LogStash::Outputs::RadAlert < LogStash::Outputs::Base
       rad_message[:tags] += [rad_message[:check]] 
     end
 
+    # can add tags in in the rad block itself too - why not.
+    if @event_tags then
+      rad_message[:tags] += @event_tags 
+    end
+
     request = Net::HTTP::Post.new(@pd_uri.path)
     request.body = rad_message.to_json
     response = @client.request(request)
+
+    puts request.body
 
     @logger.debug("RadAlert Response", :response => response.body)
 
