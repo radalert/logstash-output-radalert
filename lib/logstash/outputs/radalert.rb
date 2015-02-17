@@ -14,10 +14,13 @@ class LogStash::Outputs::RadAlert < LogStash::Outputs::Base
   config :pdurl, :validate => :string, :default => "http://requestb.in/1bormpk1"
 
   # If set to true - will be an OK heartbeat
-  config :heartbeat, :validate => :boolean, :default => false
+  config :event_state, :validate => :string, :default => "CRITICAL"
 
   # how long to expire the heartbeat after, if using one
   config :event_timeout, :validate => :number
+
+  # what to go to next
+  config :event_transition_to, :validate => :string, :default => "UNKNOWN"
 
   # the check name will be calculated by default
   config :check, :validate => :string
@@ -47,7 +50,8 @@ class LogStash::Outputs::RadAlert < LogStash::Outputs::Base
     rad_message = Hash.new
     rad_message[:api_key] = @api_key
     rad_message[:check] = check_name(event)
-    rad_message[:state] = @heartbeat ? "OK" : "CRITICAL" 
+    rad_message[:state] = @event_state
+    rad_message[:transition_to] = @event_transition_to
     rad_message[:summary] = event.sprintf(@summary)
 
     if @event_timeout then
